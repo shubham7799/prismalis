@@ -38,6 +38,40 @@ export class ApiError extends Error {
   }
 }
 
+// ── Streaming fetch (text/plain body, chunked) ────────────────────────────────
+
+async function streamReq(
+  path: string,
+  body: Record<string, unknown>,
+  onChunk: (chunk: string) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const token = getToken();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch(`${API}${path}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+    signal,
+  });
+
+  if (!res.ok || !res.body) {
+    const errBody = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new ApiError(errBody?.detail ?? "Request failed", res.status);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = decoder.decode(value, { stream: true });
+    if (chunk) onChunk(chunk);
+  }
+}
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export type User = {
@@ -117,6 +151,67 @@ export type Dataset = {
 
 export type WatchlistItem = CompanyProfile & Quote;
 
+// ── Assistant (AI chat) ──────────────────────────────────────────────────────
+
+export type Chat = {
+  id: string;
+  user_id: string;
+  title: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type ChatMessage = {
+  id: string;
+  chat_id: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string | null;
+};
+
+export type ChatDetail = Chat & { messages: ChatMessage[] };
+
+// ── Screener ─────────────────────────────────────────────────────────────────
+
+export type ScreenerFilters = {
+  sector?: string;
+  industry?: string;
+  marketCapMin?: number;
+  marketCapMax?: number;
+  peMin?: number;
+  peMax?: number;
+  priceMin?: number;
+  priceMax?: number;
+  betaMax?: number;
+  dividendMin?: number;
+  revenueGrowthMin?: number;
+  exchange?: string;
+  country?: string;
+  limit?: number;
+};
+
+export type ScreenerResult = {
+  symbol: string;
+  name: string | null;
+  sector: string | null;
+  industry: string | null;
+  exchange: string | null;
+  country: string | null;
+  price: number | null;
+  marketCap: number | null;
+  pe: number | null;
+  beta: number | null;
+  dividendYield: number | null;
+  revenueGrowth: number | null;
+  volume: number | null;
+};
+
+export type ScreenerResponse = {
+  count: number;
+  filters: Record<string, unknown>;
+  results: ScreenerResult[];
+};
+
 // ── API surface ──────────────────────────────────────────────────────────────
 
 export const api = {
@@ -156,5 +251,27 @@ export const api = {
     list: () => req<WatchlistItem[]>("/api/watchlist"),
     add: (symbol: string) => req<{ symbol: string; status: string }>(`/api/watchlist/${symbol}`, { method: "POST" }),
     remove: (symbol: string) => req<void>(`/api/watchlist/${symbol}`, { method: "DELETE" }),
+  },
+  assistant: {
+    listChats: () => req<Chat[]>("/api/assistant/chats"),
+    getChat: (id: string) => req<ChatDetail>(`/api/assistant/chats/${id}`),
+    renameChat: (id: string, title: string) =>
+      req<Chat>(`/api/assistant/chats/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ title }),
+      }),
+    deleteChat: (id: string) =>
+      req<void>(`/api/assistant/chats/${id}`, { method: "DELETE" }),
+    startChatStream: (message: string, onChunk: (chunk: string) => void, signal?: AbortSignal) =>
+      streamReq("/api/assistant/chats/messages", { message, stream: true }, onChunk, signal),
+    sendMessageStream: (id: string, message: string, onChunk: (chunk: string) => void, signal?: AbortSignal) =>
+      streamReq(`/api/assistant/chats/${id}/messages`, { message, stream: true }, onChunk, signal),
+  },
+  screener: {
+    screen: (filters: ScreenerFilters) =>
+      req<ScreenerResponse>("/api/screener", {
+        method: "POST",
+        body: JSON.stringify(filters),
+      }),
   },
 };

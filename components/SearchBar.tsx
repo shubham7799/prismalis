@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Search } from "lucide-react";
-import { api, getToken } from "@/lib/api";
+import { api } from "@/lib/api";
 
 type Result = { symbol: string; name: string; exchange: string };
 
@@ -45,21 +45,14 @@ export function SearchBar({ autoFocus = false, size = "md" }: { autoFocus?: bool
     timerRef.current = setTimeout(async () => {
       setLoading(true);
       try {
-        if (getToken()) {
-          const res = await api.stocks.search(value, 8);
-          const mapped: Result[] = res.map((r) => ({
-            symbol: r.symbol,
-            name: r.name,
-            exchange: r.exchangeShortName ?? r.exchange ?? "",
-          }));
-          setResults(mapped);
-          setOpen(mapped.length > 0);
-        } else {
-          const res = await fetch(`/api/search?q=${encodeURIComponent(value)}`);
-          const data: Result[] = await res.json();
-          setResults(data);
-          setOpen(data.length > 0);
-        }
+        const res = await api.stocks.search(value, 8);
+        const mapped: Result[] = res.map((r) => ({
+          symbol: r.symbol,
+          name: r.name,
+          exchange: r.exchangeShortName ?? r.exchange ?? "",
+        }));
+        setResults(mapped);
+        setOpen(mapped.length > 0);
       } catch {
         setResults([]);
       } finally {

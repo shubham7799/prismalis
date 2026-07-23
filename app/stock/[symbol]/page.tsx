@@ -58,26 +58,24 @@ export default function StockPage({ params }: { params: Promise<{ symbol: string
   // ── Fetch dataset ────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!user) { setLoadingData(false); return; }
     setLoadingData(true);
     setError("");
 
-    api.stocks.dataset(symbol, period, 8)
+    api.stocks.dataset(symbol)
       .then(setDataset)
       .catch((e: ApiError) => setError(e.message))
       .finally(() => setLoadingData(false));
-  }, [symbol, user, period]);
+  }, [symbol, period]);
 
   // ── Fetch price history ──────────────────────────────────────────────────
 
   const fetchHistory = useCallback((days: number) => {
-    if (!user) return;
     setLoadingChart(true);
     api.stocks.historicalPrices(symbol, days)
       .then((d) => setHistory((d.historical ?? []).slice().reverse()))
       .catch(() => setHistory([]))
       .finally(() => setLoadingChart(false));
-  }, [symbol, user]);
+  }, [symbol]);
 
   useEffect(() => {
     const days = RANGES.find((r) => r.label === range)?.days ?? 365;
@@ -114,31 +112,6 @@ export default function StockPage({ params }: { params: Promise<{ symbol: string
   const profile = dataset?.profile?.[0] as CompanyProfile | undefined;
   const quote = dataset?.quote?.[0] as Quote | undefined;
   const up = (quote?.change ?? 0) >= 0;
-
-  // ── Not authed ───────────────────────────────────────────────────────────
-
-  if (!user && !loadingData) {
-    return (
-      <div className="min-h-screen">
-        <Header />
-        <div className="border-b border-border/40 bg-background/60 backdrop-blur">
-          <div className="mx-auto max-w-6xl px-6 py-3">
-            <SearchBar size="sm" />
-          </div>
-        </div>
-        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center px-4">
-          <div className="size-16 rounded-2xl bg-surface border border-border flex items-center justify-center text-2xl">
-            🔒
-          </div>
-          <h2 className="text-xl font-bold">Sign in to view stock data</h2>
-          <p className="text-sm text-muted-foreground max-w-sm">
-            Create a free Prismalis account to access live stock data, fundamentals, and charts.
-          </p>
-          <Link href="/auth" className="btn-neon mt-2">Sign in / Register</Link>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen">
@@ -235,7 +208,7 @@ export default function StockPage({ params }: { params: Promise<{ symbol: string
                     </div>
                   )}
                 </div>
-                {user && (
+                {user ? (
                   <button
                     onClick={toggleWatchlist}
                     disabled={wlLoading}
@@ -255,6 +228,15 @@ export default function StockPage({ params }: { params: Promise<{ symbol: string
                     )}
                     {inWatchlist ? "Saved" : "Watchlist"}
                   </button>
+                ) : (
+                  <Link
+                    href="/auth"
+                    className="flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium text-muted-foreground hover:border-neon-amber/40 hover:text-neon-amber transition-all"
+                    title="Sign in to save to watchlist"
+                  >
+                    <Bookmark className="size-4" />
+                    Watchlist
+                  </Link>
                 )}
               </div>
             </div>
